@@ -479,10 +479,7 @@ julia> A = [4. 9. 7.; 4. 4. 1.; 4. 3. 2.]
 julia> F = hessenberg(A)
 Hessenberg{Float64, UpperHessenberg{Float64, Matrix{Float64}}, Matrix{Float64}, Vector{Float64}, Bool}
 Q factor:
-3×3 LinearAlgebra.HessenbergQ{Float64, Matrix{Float64}, Vector{Float64}, false}:
- 1.0   0.0        0.0
- 0.0  -0.707107  -0.707107
- 0.0  -0.707107   0.707107
+3×3 LinearAlgebra.HessenbergQ{Float64, Matrix{Float64}, Vector{Float64}, false}
 H factor:
 3×3 UpperHessenberg{Float64, Matrix{Float64}}:
   4.0      -11.3137       -1.41421
