@@ -287,63 +287,11 @@ end
 
 lmul!(Q::AbstractQ, B::AbstractTriangular) = lmul!(Q, full!(B))
 lmul!(Q::QRPackedQ, B::AbstractTriangular) = lmul!(Q, full!(B)) # disambiguation
-lmul!(Q::Adjoint{<:Any,<:AbstractQ}, B::AbstractTriangular) = lmul!(Q, full!(B))
-lmul!(Q::Adjoint{<:Any,<:QRPackedQ}, B::AbstractTriangular) = lmul!(Q, full!(B)) # disambiguation
-
-function _qlmul(Q::AbstractQ, B)
-    TQB = promote_type(eltype(Q), eltype(B))
-    if size(Q.factors, 1) == size(B, 1)
-        Bnew = Matrix{TQB}(B)
-    elseif size(Q.factors, 2) == size(B, 1)
-        Bnew = [Matrix{TQB}(B); zeros(TQB, size(Q.factors, 1) - size(B,1), size(B, 2))]
-    else
-        throw(DimensionMismatch("first dimension of matrix must have size either $(size(Q.factors, 1)) or $(size(Q.factors, 2))"))
-    end
-    lmul!(convert(AbstractMatrix{TQB}, Q), Bnew)
-end
-function _qlmul(adjQ::Adjoint{<:Any,<:AbstractQ}, B)
-    TQB = promote_type(eltype(adjQ), eltype(B))
-    lmul!(adjoint(convert(AbstractMatrix{TQB}, parent(adjQ))), Matrix{TQB}(B))
-end
-
-*(Q::AbstractQ, B::AbstractTriangular) = _qlmul(Q, B)
-*(Q::Adjoint{<:Any,<:AbstractQ}, B::AbstractTriangular) = _qlmul(Q, B)
-*(Q::AbstractQ, B::BiTriSym) = _qlmul(Q, B)
-*(Q::Adjoint{<:Any,<:AbstractQ}, B::BiTriSym) = _qlmul(Q, B)
-*(Q::AbstractQ, B::Diagonal) = _qlmul(Q, B)
-*(Q::Adjoint{<:Any,<:AbstractQ}, B::Diagonal) = _qlmul(Q, B)
+lmul!(Q::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractTriangular) = lmul!(Q, full!(B)) # disambiguation
 
 rmul!(A::AbstractTriangular, Q::AbstractQ) = rmul!(full!(A), Q)
-rmul!(A::AbstractTriangular, Q::Adjoint{<:Any,<:AbstractQ}) = rmul!(full!(A), Q)
-
-function _qrmul(A, Q::AbstractQ)
-    TAQ = promote_type(eltype(A), eltype(Q))
-    return rmul!(Matrix{TAQ}(A), convert(AbstractMatrix{TAQ}, Q))
-end
-function _qrmul(A, adjQ::Adjoint{<:Any,<:AbstractQ})
-    Q = adjQ.parent
-    TAQ = promote_type(eltype(A), eltype(Q))
-    if size(A,2) == size(Q.factors, 1)
-        Anew = Matrix{TAQ}(A)
-    elseif size(A,2) == size(Q.factors,2)
-        Anew = [Matrix{TAQ}(A) zeros(TAQ, size(A, 1), size(Q.factors, 1) - size(Q.factors, 2))]
-    else
-        throw(DimensionMismatch("matrix A has dimensions $(size(A)) but matrix B has dimensions $(size(Q))"))
-    end
-    return rmul!(Anew, adjoint(convert(AbstractMatrix{TAQ}, Q)))
-end
-
-*(A::AbstractTriangular, Q::AbstractQ) = _qrmul(A, Q)
-*(A::AbstractTriangular, Q::Adjoint{<:Any,<:AbstractQ}) = _qrmul(A, Q)
-*(A::BiTriSym, Q::AbstractQ) = _qrmul(A, Q)
-*(A::BiTriSym, Q::Adjoint{<:Any,<:AbstractQ}) = _qrmul(A, Q)
-*(A::Diagonal, Q::AbstractQ) = _qrmul(A, Q)
-*(A::Diagonal, Q::Adjoint{<:Any,<:AbstractQ}) = _qrmul(A, Q)
-
-*(Q::AbstractQ, B::AbstractQ) = Q * (B * I)
-*(Q::Adjoint{<:Any,<:AbstractQ}, B::AbstractQ) = Q * (B * I)
-*(Q::AbstractQ, B::Adjoint{<:Any,<:AbstractQ}) = Q * (B * I)
-*(Q::Adjoint{<:Any,<:AbstractQ}, B::Adjoint{<:Any,<:AbstractQ}) = Q * (B * I)
+rmul!(A::AbstractTriangular, Q::QRPackedQ) = rmul!(full!(A), Q) # disambiguation
+rmul!(A::AbstractTriangular, Q::AdjointQ{<:Any,<:QRPackedQ}) = rmul!(full!(A), Q) # disambiguation
 
 # fill[stored]! methods
 fillstored!(A::Diagonal, x) = (fill!(A.diag, x); A)
