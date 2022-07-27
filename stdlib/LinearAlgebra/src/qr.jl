@@ -316,9 +316,7 @@ julia> a = [1. 2.; 3. 4.]
 julia> qr!(a)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
 Q factor:
-2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
- -0.316228  -0.948683
- -0.948683   0.316228
+2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
 R factor:
 2×2 Matrix{Float64}:
  -3.16228  -4.42719
@@ -403,10 +401,7 @@ julia> A = [3.0 -6.0; 4.0 -8.0; 0.0 1.0]
 julia> F = qr(A)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
 Q factor:
-3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
- -0.6   0.0   0.8
- -0.8   0.0  -0.6
-  0.0  -1.0   0.0
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
 R factor:
 2×2 Matrix{Float64}:
  -5.0  10.0
@@ -525,6 +520,10 @@ inv(Q::AbstractQ) = Q'
 adjoint(Q::AbstractQ) = AdjointQ(Q)
 adjoint(adjQ::AdjointQ) = adjQ.Q
 eltype(::AbstractQ{T}) where {T} = T
+
+function show(io::IO, mime::MIME{Symbol("text/plain")}, Q::AbstractQ)
+    print(io, Base.dims2string(size(Q)), ' ', summary(Q))
+end
 
 """
     QRPackedQ <: LinearAlgebra.AbstractQ
