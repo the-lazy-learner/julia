@@ -518,6 +518,8 @@ end
 
 inv(Q::AbstractQ) = Q'
 adjoint(Q::AbstractQ) = AdjointQ(Q)
+transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
+transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
 eltype(::AbstractQ{T}) where {T} = T
 
@@ -581,8 +583,8 @@ Matrix{T}(Q::AbstractQ{S}) where {T,S} = convert(Matrix{T}, lmul!(Q, Matrix{S}(I
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
 Array{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 Array(Q::AbstractQ) = Matrix(Q)
-convert(::Type{Array}, Q::AbstractQ) = Matrix(Q)
-convert(::Type{Matrix}, Q::AbstractQ) = Matrix(Q)
+convert(::Type{T}, Q::AbstractQ) where {T<:Array} = T(Q)
+convert(::Type{T}, Q::AbstractQ) where {T<:Matrix} = T(Q)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
     convert(LinearAlgebra.AbstractQ{T}, Q))
@@ -594,8 +596,15 @@ size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :facto
 size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(Q::Union{QRCompactWYQ,QRPackedQ}, dim::Integer) =
     size(getfield(Q, :factors), dim == 2 ? 1 : dim)
-size(Q::Union{QRCompactWYQ,QRPackedQ}) = size(Q, 1), size(Q, 2)
+size(Q::Union{QRCompactWYQ,QRPackedQ}) = size(Q, 1), size(Q, 1)
 size(adjQ::AdjointQ) = size(adjQ.Q, 2), size(adjQ.Q, 1)
+size(adjQ::AdjointQ, dim::Integer) = dim in (1, 2) ? size(adjQ)[dim] : 1
+# pseudo-array behvaiour, required for indexing with `begin` or `end`
+axes(Q::AbstractQ) = map(Base.OneTo, size(Q))
+axes(Q::AbstractQ, d::Integer) = d in (1, 2) ? axes(Q)[d] : Base.OneTo(1)
+
+==(Q::QRCompactWYQ, P::QRCompactWYQ) = Q.factors == P.factors && Q.T == P.T
+==(Q::QRPackedQ, P::QRPackedQ) = Q.factors == P.factors && Q.τ == P.τ
 
 copymutable(Q::AbstractQ{T}) where {T} = lmul!(Q, Matrix{T}(I, size(Q)))
 copy(Q::AbstractQ) = copymutable(Q)
@@ -735,6 +744,10 @@ function lmul!(adjA::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat)
         end
     end
     B
+end
+function *(adjQ::AdjointQ, B::AbstractVector)
+    TQB = promote_type(eltype(adjQ), eltype(B))
+    return lmul!(convert(AbstractQ{TQB}, adjQ), copy_similar(B, TQB))
 end
 function *(adjQ::AdjointQ, B::AbstractMatrix)
     TQB = promote_type(eltype(adjQ), eltype(B))
