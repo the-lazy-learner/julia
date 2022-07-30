@@ -580,6 +580,7 @@ QRCompactWYQ{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ(convert(AbstractMatrix
 AbstractMatrix{S}(Q::QRCompactWYQ{S}) where {S} = Q
 AbstractMatrix{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ{S}(Q)
 Matrix{T}(Q::AbstractQ{S}) where {T,S} = convert(Matrix{T}, lmul!(Q, Matrix{S}(I, size(Q, 1), min(size(Q.factors)...))))
+Matrix{T}(adjQ::AdjointQ{S}) where {T,S} = convert(Matrix{T}, lmul!(adjQ, Matrix{S}(I, size(adjQ))))
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
 Array{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 Array(Q::AbstractQ) = Matrix(Q)
@@ -592,14 +593,14 @@ convert(::Type{AbstractQ{T}}, Q::QRPackedQ) where {T} = QRPackedQ{T}(Q)
 convert(::Type{AbstractQ{T}}, Q::QRCompactWYQ) where {T} = QRCompactWYQ{T}(Q)
 convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = adjoint(convert(AbstractQ{T}, adjQ.Q))
 
-size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
 size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
+size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
+size(Q::AbstractQ, dim::Integer) = dim in (1, 2) ? size(Q)[dim] : 1
 size(Q::Union{QRCompactWYQ,QRPackedQ}, dim::Integer) =
-    size(getfield(Q, :factors), dim == 2 ? 1 : dim)
-size(Q::Union{QRCompactWYQ,QRPackedQ}) = size(Q, 1), size(Q, 1)
+    size(Q.factors, dim == 2 ? 1 : dim)
+size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 size(adjQ::AdjointQ) = size(adjQ.Q, 2), size(adjQ.Q, 1)
-size(adjQ::AdjointQ, dim::Integer) = dim in (1, 2) ? size(adjQ)[dim] : 1
-# pseudo-array behvaiour, required for indexing with `begin` or `end`
+# pseudo-array behaviour, required for indexing with `begin` or `end`
 axes(Q::AbstractQ) = map(Base.OneTo, size(Q))
 axes(Q::AbstractQ, d::Integer) = d in (1, 2) ? axes(Q)[d] : Base.OneTo(1)
 
@@ -877,6 +878,10 @@ function *(adjA::Adjoint{<:Any,<:AbstractVecOrMat}, adjQ::AdjointQ)
     adjoint!(Ac, A)
     return rmul!(Ac, convert(AbstractQ{TAQ}, adjQ))
 end
+
+### QQ (including adjoints)
+*(Q::AbstractQ, P::AbstractQ) = Q * (P*I)
+mul!(C::StridedVecOrMat{T}, Q::AbstractQ{T}, B::AbstractQ{T}) where {T} = mul!(C, Q, B*I)
 
 ### mul!
 function mul!(C::StridedVecOrMat{T}, Q::AbstractQ{T}, B::AbstractVecOrMat{T}) where {T}
