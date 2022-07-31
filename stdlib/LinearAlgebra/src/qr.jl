@@ -604,9 +604,6 @@ size(adjQ::AdjointQ) = size(adjQ.Q, 2), size(adjQ.Q, 1)
 axes(Q::AbstractQ) = map(Base.OneTo, size(Q))
 axes(Q::AbstractQ, d::Integer) = d in (1, 2) ? axes(Q)[d] : Base.OneTo(1)
 
-==(Q::QRCompactWYQ, P::QRCompactWYQ) = Q.factors == P.factors && Q.T == P.T
-==(Q::QRPackedQ, P::QRPackedQ) = Q.factors == P.factors && Q.τ == P.τ
-
 copymutable(Q::AbstractQ{T}) where {T} = lmul!(Q, Matrix{T}(I, size(Q)))
 copy(Q::AbstractQ) = copymutable(Q)
 getindex(Q::AbstractQ, inds...) = copymutable(Q)[inds...]
