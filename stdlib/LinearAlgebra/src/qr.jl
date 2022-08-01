@@ -298,7 +298,7 @@ qr!(A::StridedMatrix{<:BlasFloat}, ::ColumnNorm) = QRPivoted(LAPACK.geqp3!(A)...
 """
     qr!(A, pivot = NoPivot(); blocksize)
 
-`qr!` is the same as [`qr`](@ref) when `A` is a subtype of [`StridedMatrix`](@ref),
+`qr!` is the same as [`qr`](@ref) when `A` is a subtype of [`AbstractMatrix`](@ref),
 but saves space by overwriting the input `A`, instead of creating a copy.
 An [`InexactError`](@ref) exception is thrown if the factorization produces a number not
 representable by the element type of `A`, e.g. for integer types.
@@ -538,7 +538,7 @@ struct QRPackedQ{T,S<:AbstractMatrix{T},C<:AbstractVector{T}} <: AbstractQ{T}
     τ::C
 
     function QRPackedQ{T,S,C}(factors, τ) where {T,S<:AbstractMatrix{T},C<:AbstractVector{T}}
-        require_one_based_indexing(factors)
+        require_one_based_indexing(factors, τ)
         new{T,S,C}(factors, τ)
     end
 end
@@ -561,7 +561,7 @@ struct QRCompactWYQ{S, M<:AbstractMatrix{S}, C<:AbstractMatrix{S}} <: AbstractQ{
     T::C
 
     function QRCompactWYQ{S,M,C}(factors, T) where {S,M<:AbstractMatrix{S},C<:AbstractMatrix{S}}
-        require_one_based_indexing(factors)
+        require_one_based_indexing(factors, T)
         new{S,M,C}(factors, T)
     end
 end
@@ -774,7 +774,8 @@ rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,S}) where {T<:BlasFloat,S<:Stride
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
 rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,S}) where {T<:BlasFloat,S<:StridedMatrix} =
     LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
-function rmul!(A::StridedMatrix,Q::QRPackedQ)
+function rmul!(A::AbstractMatrix, Q::QRPackedQ)
+    require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A,1), size(A,2)
     if nA != mQ
@@ -818,7 +819,8 @@ rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:Bla
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'T', Q.factors, Q.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'C', Q.factors, Q.τ, A))
-function rmul!(A::StridedMatrix, adjQ::AdjointQ{<:Any,<:QRPackedQ})
+function rmul!(A::AbstractMatrix, adjQ::AdjointQ{<:Any,<:QRPackedQ})
+    require_one_based_indexing(A)
     Q = adjQ.Q
     mQ, nQ = size(Q.factors)
     mA, nA = size(A,1), size(A,2)
@@ -878,33 +880,34 @@ end
 
 ### QQ (including adjoints)
 *(Q::AbstractQ, P::AbstractQ) = Q * (P*I)
-mul!(C::StridedVecOrMat{T}, Q::AbstractQ{T}, B::AbstractQ{T}) where {T} = mul!(C, Q, B*I)
 
 ### mul!
-function mul!(C::StridedVecOrMat{T}, Q::AbstractQ{T}, B::AbstractVecOrMat{T}) where {T}
+function mul!(C::AbstractVecOrMat{T}, Q::AbstractQ{T}, B::Union{AbstractVecOrMat{T},AbstractQ{T}}) where {T}
     require_one_based_indexing(C, B)
     mB = size(B, 1)
     mC = size(C, 1)
     if mB < mC
-        inds = CartesianIndices(B)
-        copyto!(C, inds, B, inds)
+        inds = CartesianIndices(axes(B))
+        copyto!(view(C, inds), B)
         C[CartesianIndices((mB+1:mC, axes(C, 2)))] .= zero(T)
         return lmul!(Q, C)
     else
         return lmul!(Q, copyto!(C, B))
     end
 end
-mul!(C::StridedVecOrMat{T}, A::AbstractVecOrMat{T}, Q::AbstractQ{T}) where {T} = rmul!(copyto!(C, A), Q)
-mul!(C::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:AbstractQ{T}}, B::AbstractVecOrMat{T}) where {T} = lmul!(adjQ, copyto!(C, B))
-mul!(C::StridedVecOrMat{T}, A::AbstractVecOrMat{T}, adjQ::AdjointQ{<:Any,<:AbstractQ{T}}) where {T} = rmul!(copyto!(C, A), adjQ)
+mul!(C::AbstractVecOrMat{T}, A::AbstractVecOrMat{T}, Q::AbstractQ{T}) where {T} = rmul!(copyto!(C, A), Q)
+mul!(C::AbstractVecOrMat{T}, adjQ::AdjointQ{<:Any,<:AbstractQ{T}}, B::AbstractVecOrMat{T}) where {T} = lmul!(adjQ, copyto!(C, B))
+mul!(C::AbstractVecOrMat{T}, A::AbstractVecOrMat{T}, adjQ::AdjointQ{<:Any,<:AbstractQ{T}}) where {T} = rmul!(copyto!(C, A), adjQ)
 
-function ldiv!(A::QRCompactWY{T}, b::StridedVector{T}) where {T<:BlasFloat}
-    m,n = size(A)
+function ldiv!(A::QRCompactWY{T}, b::AbstractVector{T}) where {T<:BlasFloat}
+    require_one_based_indexing(b)
+    m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
-function ldiv!(A::QRCompactWY{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
-    m,n = size(A)
+function ldiv!(A::QRCompactWY{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
+    require_one_based_indexing(B)
+    m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
     return B
 end
@@ -946,7 +949,7 @@ function ldiv!(A::QRPivoted{T}, B::StridedMatrix{T}, rcond::Real) where T<:BlasF
     return B, rnk
 end
 ldiv!(A::QRPivoted{T}, B::StridedVector{T}) where {T<:BlasFloat} =
-    vec(ldiv!(A,reshape(B,length(B),1)))
+    vec(ldiv!(A, reshape(B, length(B), 1)))
 ldiv!(A::QRPivoted{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     ldiv!(A, B, min(size(A)...)*eps(real(float(one(eltype(B))))))[1]
 function _wide_qr_ldiv!(A::QR{T}, B::StridedMatrix{T}) where T
