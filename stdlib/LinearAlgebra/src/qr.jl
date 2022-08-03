@@ -521,7 +521,8 @@ adjoint(Q::AbstractQ) = AdjointQ(Q)
 transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
 transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
-eltype(::AbstractQ{T}) where {T} = T
+parent(adjQ::AdjointQ) = adjQ.Q
+eltype(::Type{<:AbstractQ{T}}) where {T} = T
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, Q::AbstractQ)
     print(io, Base.dims2string(size(Q)), ' ', summary(Q))
