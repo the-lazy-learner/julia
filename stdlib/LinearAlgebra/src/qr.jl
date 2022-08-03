@@ -592,7 +592,7 @@ convert(::Type{T}, Q::AbstractQ) where {T<:Matrix} = T(Q)
     convert(LinearAlgebra.AbstractQ{T}, Q))
 convert(::Type{AbstractQ{T}}, Q::QRPackedQ) where {T} = QRPackedQ{T}(Q)
 convert(::Type{AbstractQ{T}}, Q::QRCompactWYQ) where {T} = QRCompactWYQ{T}(Q)
-convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = adjoint(convert(AbstractQ{T}, adjQ.Q))
+convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, adjQ.Q)'
 
 size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
@@ -863,15 +863,16 @@ end
 *(a::AbstractVector, adjQ::AdjointQ) = reshape(a, length(a), 1) * adjQ
 
 ### AcQ/AcQc
-function *(adjA::Adjoint{<:Any,<:AbstractVecOrMat}, Q::AbstractQ)
+function *(adjA::Adjoint{<:Any,<:AbstractMatrix}, Q::AbstractQ)
     A = adjA.parent
     TAQ = promote_type(eltype(A), eltype(Q))
     Ac = similar(A, TAQ, (size(A, 2), size(A, 1)))
     adjoint!(Ac, A)
     return rmul!(Ac, convert(AbstractQ{TAQ}, Q))
 end
+*(u::AdjointAbsVec, Q::AbstractQ) = adjoint(Q' * u.parent)
 # disambiguation
-function *(adjA::Adjoint{<:Any,<:AbstractVecOrMat}, adjQ::AdjointQ)
+function *(adjA::Adjoint{<:Any,<:AbstractMatrix}, adjQ::AdjointQ)
     A = adjA.parent
     TAQ = promote_type(eltype(A), eltype(adjQ))
     Ac = similar(A, TAQ, (size(A, 2), size(A, 1)))
