@@ -171,7 +171,6 @@ static jl_callptr_t _jl_compile_codeinst(
         size_t world,
         orc::ThreadSafeContext context)
 {
-    JL_LOCK(&jl_codegen_lock);
     uint64_t start_time = 0;
     bool timed = !!*jl_ExecutionEngine->get_dump_compiles_stream();
     if (timed)
@@ -184,6 +183,7 @@ static jl_callptr_t _jl_compile_codeinst(
 
     jl_callptr_t fptr = NULL;
     // emit the code in LLVM IR form
+    JL_LOCK(&jl_codegen_lock);
     jl_codegen_params_t params(std::move(context)); // Locks the context
     params.cache = true;
     params.world = world;
@@ -228,6 +228,7 @@ static jl_callptr_t _jl_compile_codeinst(
             orc::ThreadSafeModule &M = std::get<0>(def.second);
             jl_add_to_ee(M, NewExports);
         }
+        JL_UNLOCK(&jl_codegen_lock);
         ++CompiledCodeinsts;
         MaxWorkqueueSize.updateMax(emitted.size());
         IndirectCodeinsts += emitted.size() - 1;
@@ -281,7 +282,6 @@ static jl_callptr_t _jl_compile_codeinst(
             jl_printf(stream, "\"\n");
         }
     }
-    JL_UNLOCK(&jl_codegen_lock);
     return fptr;
 }
 

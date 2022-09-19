@@ -273,7 +273,6 @@ void *jl_create_native_impl(jl_array_t *methods, LLVMOrcThreadSafeModuleRef llvm
     jl_method_instance_t *mi = NULL;
     jl_code_info_t *src = NULL;
     JL_GC_PUSH1(&src);
-    JL_LOCK(&jl_codegen_lock);
     orc::ThreadSafeContext ctx;
     orc::ThreadSafeModule backing;
     if (!llvmmod) {
@@ -282,13 +281,14 @@ void *jl_create_native_impl(jl_array_t *methods, LLVMOrcThreadSafeModuleRef llvm
     }
     orc::ThreadSafeModule &clone = llvmmod ? *unwrap(llvmmod) : backing;
     auto ctxt = clone.getContext();
-    jl_codegen_params_t params(ctxt);
-    params.params = cgparams;
     uint64_t compiler_start_time = 0;
     uint8_t measure_compile_time_enabled = jl_atomic_load_relaxed(&jl_measure_compile_time_enabled);
     if (measure_compile_time_enabled)
         compiler_start_time = jl_hrtime();
 
+    JL_LOCK(&jl_codegen_lock);
+    jl_codegen_params_t params(ctxt);
+    params.params = cgparams;
     params.imaging = imaging;
 
     // compile all methods for the current world and type-inference world
@@ -1011,16 +1011,16 @@ void jl_get_llvmf_defn_impl(jl_llvmf_dump_t* dump, jl_method_instance_t *mi, siz
 
     // emit this function into a new llvm module
     if (src && jl_is_code_info(src)) {
-        JL_LOCK(&jl_codegen_lock);
-        auto ctx = jl_ExecutionEngine->getContext();
-        jl_codegen_params_t output(*ctx);
-        output.world = world;
-        output.params = &params;
-        orc::ThreadSafeModule m = jl_create_llvm_module(name_from_method_instance(mi), output.tsctx, output.imaging);
         uint64_t compiler_start_time = 0;
         uint8_t measure_compile_time_enabled = jl_atomic_load_relaxed(&jl_measure_compile_time_enabled);
         if (measure_compile_time_enabled)
             compiler_start_time = jl_hrtime();
+        auto ctx = jl_ExecutionEngine->getContext();
+        orc::ThreadSafeModule m = jl_create_llvm_module(name_from_method_instance(mi), *ctx, imaging_default());
+        JL_LOCK(&jl_codegen_lock);
+        jl_codegen_params_t output(*ctx);
+        output.world = world;
+        output.params = &params;
         auto decls = jl_emit_code(m, mi, src, jlrettype, output);
         JL_UNLOCK(&jl_codegen_lock); // Might GC
 
