@@ -171,8 +171,7 @@ static jl_callptr_t _jl_compile_codeinst(
         size_t world,
         orc::ThreadSafeContext context)
 {
-    // caller must hold codegen_lock
-    // and have disabled finalizers
+    JL_LOCK(&jl_codegen_lock);
     uint64_t start_time = 0;
     bool timed = !!*jl_ExecutionEngine->get_dump_compiles_stream();
     if (timed)
@@ -282,6 +281,7 @@ static jl_callptr_t _jl_compile_codeinst(
             jl_printf(stream, "\"\n");
         }
     }
+    JL_UNLOCK(&jl_codegen_lock);
     return fptr;
 }
 
@@ -425,9 +425,7 @@ jl_code_instance_t *jl_generate_fptr_impl(jl_method_instance_t *mi JL_PROPAGATES
             }
         }
         ++SpecFPtrCount;
-        JL_LOCK(&jl_codegen_lock); // also disables finalizers, to prevent any unexpected recursion
         _jl_compile_codeinst(codeinst, src, world, *jl_ExecutionEngine->getContext());
-        JL_UNLOCK(&jl_codegen_lock);
         if (jl_atomic_load_relaxed(&codeinst->invoke) == NULL)
             codeinst = NULL;
     }
@@ -475,9 +473,7 @@ void jl_generate_fptr_for_unspecialized_impl(jl_code_instance_t *unspec)
         }
         assert(src && jl_is_code_info(src));
         ++UnspecFPtrCount;
-        JL_LOCK(&jl_codegen_lock);
         _jl_compile_codeinst(unspec, src, unspec->min_world, *jl_ExecutionEngine->getContext());
-        JL_UNLOCK(&jl_codegen_lock); // Might GC
         if (jl_atomic_load_relaxed(&unspec->invoke) == NULL) {
             // if we hit a codegen bug (or ran into a broken generated function or llvmcall), fall back to the interpreter as a last resort
             jl_atomic_store_release(&unspec->invoke, jl_fptr_interpret_call_addr);
@@ -527,9 +523,7 @@ jl_value_t *jl_dump_method_asm_impl(jl_method_instance_t *mi, size_t world,
                 specfptr = (uintptr_t)jl_atomic_load_relaxed(&codeinst->specptr.fptr);
                 if (src && jl_is_code_info(src)) {
                     if (fptr == (uintptr_t)jl_fptr_const_return_addr && specfptr == 0) {
-                        JL_LOCK(&jl_codegen_lock); // also disables finalizers, to prevent any unexpected recursion
                         fptr = (uintptr_t)_jl_compile_codeinst(codeinst, src, world, *jl_ExecutionEngine->getContext());
-                        JL_UNLOCK(&jl_codegen_lock);
                         specfptr = (uintptr_t)jl_atomic_load_relaxed(&codeinst->specptr.fptr);
                     }
                 }
