@@ -154,7 +154,7 @@ function fixemup!(cond, rename, ir::IRCode, ci::CodeInfo, idx::Int, @nospecializ
             end
             op[] = x
         elseif isa(val, GlobalRef) && !(isdefined(val.mod, val.name) && isconst(val.mod, val.name)) ||
-               (isa(val, Expr) && val.head === :static_parameter)
+               isexpr(val, :static_parameter)
             op[] = NewSSAValue(insert_node!(ir, idx,
                 NewInstruction(val, typ_for_val(val, ci, ir.sptypes, idx, Any[]))).id - length(ir.stmts))
         end
@@ -208,7 +208,7 @@ end
 function typ_for_val(@nospecialize(x), ci::CodeInfo, sptypes::Vector{Any}, idx::Int, slottypes::Vector{Any})
     if isa(x, Expr)
         if x.head === :static_parameter
-            return sptypes[x.args[1]::Int]
+            return unwrap_maybeundefsp(sptypes, x.args[1]::Int)
         elseif x.head === :boundscheck
             return Bool
         elseif x.head === :copyast
