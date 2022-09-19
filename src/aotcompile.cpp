@@ -336,6 +336,7 @@ void *jl_create_native_impl(jl_array_t *methods, LLVMOrcThreadSafeModuleRef llvm
         // finally, make sure all referenced methods also get compiled or fixed up
         jl_compile_workqueue(emitted, *clone.getModuleUnlocked(), params, policy);
     }
+    JL_UNLOCK(&jl_codegen_lock); // Might GC
     JL_GC_POP();
 
     // process the globals array, before jl_merge_module destroys them
@@ -425,7 +426,6 @@ void *jl_create_native_impl(jl_array_t *methods, LLVMOrcThreadSafeModuleRef llvm
     if (ctx.getContext()) {
         jl_ExecutionEngine->releaseContext(std::move(ctx));
     }
-    JL_UNLOCK(&jl_codegen_lock); // Might GC
     return (void*)data;
 }
 
@@ -1022,6 +1022,7 @@ void jl_get_llvmf_defn_impl(jl_llvmf_dump_t* dump, jl_method_instance_t *mi, siz
         if (measure_compile_time_enabled)
             compiler_start_time = jl_hrtime();
         auto decls = jl_emit_code(m, mi, src, jlrettype, output);
+        JL_UNLOCK(&jl_codegen_lock); // Might GC
 
         Function *F = NULL;
         if (m) {
@@ -1055,7 +1056,6 @@ void jl_get_llvmf_defn_impl(jl_llvmf_dump_t* dump, jl_method_instance_t *mi, siz
         JL_GC_POP();
         if (measure_compile_time_enabled)
             jl_atomic_fetch_add_relaxed(&jl_cumulative_compile_time, (jl_hrtime() - compiler_start_time));
-        JL_UNLOCK(&jl_codegen_lock); // Might GC
         if (F) {
             dump->TSM = wrap(new orc::ThreadSafeModule(std::move(m)));
             dump->F = wrap(F);
