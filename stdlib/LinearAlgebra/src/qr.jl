@@ -648,9 +648,9 @@ end
 
 ## Multiplication by Q
 ### QB
-lmul!(A::QRCompactWYQ{T,S}, B::StridedVecOrMat{T}) where {T<:BlasFloat, S<:StridedMatrix} =
+lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
-lmul!(A::QRPackedQ{T,S}, B::StridedVecOrMat{T}) where {T<:BlasFloat, S<:StridedMatrix} =
+lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
 function lmul!(A::QRPackedQ, B::AbstractVecOrMat)
     require_one_based_indexing(B)
@@ -710,13 +710,13 @@ function (*)(Q::AbstractQ, b::Number)
 end
 
 ### QcB
-lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,S}}, B::StridedVecOrMat{T}) where {T<:BlasReal,S<:StridedMatrix} =
+lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'T', Q.factors, Q.T, B))
-lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,S}}, B::StridedVecOrMat{T}) where {T<:BlasComplex,S<:StridedMatrix} =
+lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'C', Q.factors, Q.T, B))
-lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,S}}, B::StridedVecOrMat{T}) where {T<:BlasReal,S<:StridedMatrix} =
+lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'T', Q.factors, Q.τ, B))
-lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,S}}, B::StridedVecOrMat{T}) where {T<:BlasComplex,S<:StridedMatrix} =
+lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'C', Q.factors, Q.τ, B))
 function lmul!(adjA::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat)
     require_one_based_indexing(B)
@@ -753,27 +753,10 @@ function *(adjQ::AdjointQ, B::AbstractMatrix)
     return lmul!(convert(AbstractQ{TQB}, adjQ), copy_similar(B, TQB))
 end
 
-### QBc/QcBc
-function *(Q::AbstractQ, adjB::Adjoint{<:Any,<:AbstractVecOrMat})
-    B = adjB.parent
-    TQB = promote_type(eltype(Q), eltype(B))
-    Bc = similar(B, TQB, (size(B, 2), size(B, 1)))
-    adjoint!(Bc, B)
-    return lmul!(convert(AbstractQ{TQB}, Q), Bc)
-end
-# disambiguation
-function *(adjQ::AdjointQ, adjB::Adjoint{<:Any,<:AbstractVecOrMat})
-    B = adjB.parent
-    TQB = promote_type(eltype(adjQ), eltype(B))
-    Bc = similar(B, TQB, (size(B, 2), size(B, 1)))
-    adjoint!(Bc, B)
-    return lmul!(convert(AbstractQ{TQB}, adjQ), Bc)
-end
-
 ### AQ
-rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,S}) where {T<:BlasFloat,S<:StridedMatrix} =
+rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
-rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,S}) where {T<:BlasFloat,S<:StridedMatrix} =
+rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
 function rmul!(A::AbstractMatrix, Q::QRPackedQ)
     require_one_based_indexing(A)
@@ -848,37 +831,20 @@ function rmul!(A::AbstractMatrix, adjQ::AdjointQ{<:Any,<:QRPackedQ})
 end
 function *(A::AbstractMatrix, adjQ::AdjointQ)
     Q = adjQ.Q
-    TAQ = promote_type(eltype(A),eltype(Q))
-    QQ = convert(AbstractQ{TAQ}, Q)
+    TAQ = promote_type(eltype(A), eltype(adjQ))
+    adjQQ = convert(AbstractQ{TAQ}, adjQ)
     if size(A,2) == size(Q.factors, 1)
         AA = copy_similar(A, TAQ)
-        return rmul!(AA, adjoint(QQ))
+        return rmul!(AA, adjQQ)
     elseif size(A,2) == size(Q.factors,2)
-        return rmul!([A zeros(TAQ, size(A, 1), size(Q.factors, 1) - size(Q.factors, 2))], adjoint(QQ))
+        return rmul!([A zeros(TAQ, size(A, 1), size(Q.factors, 1) - size(Q.factors, 2))], adjQQ)
     else
-        throw(DimensionMismatch("matrix A has dimensions $(size(A)) but matrix B has dimensions $(size(Q))"))
+        throw(DimensionMismatch("matrix A has dimensions $(size(A)) but Q-matrix B has dimensions $(size(adjQ))"))
     end
 end
-*(u::AdjointAbsVec, adjQ::AdjointQ) = adjoint(adjQ.Q * u.parent)
+*(u::AdjointAbsVec, Q::AdjointQ) = adjoint(Q' * u.parent) # disambiguation
 *(a::AbstractVector, adjQ::AdjointQ) = reshape(a, length(a), 1) * adjQ
-
-### AcQ/AcQc
-function *(adjA::Adjoint{<:Any,<:AbstractMatrix}, Q::AbstractQ)
-    A = adjA.parent
-    TAQ = promote_type(eltype(A), eltype(Q))
-    Ac = similar(A, TAQ, (size(A, 2), size(A, 1)))
-    adjoint!(Ac, A)
-    return rmul!(Ac, convert(AbstractQ{TAQ}, Q))
-end
 *(u::AdjointAbsVec, Q::AbstractQ) = adjoint(Q' * u.parent)
-# disambiguation
-function *(adjA::Adjoint{<:Any,<:AbstractMatrix}, adjQ::AdjointQ)
-    A = adjA.parent
-    TAQ = promote_type(eltype(A), eltype(adjQ))
-    Ac = similar(A, TAQ, (size(A, 2), size(A, 1)))
-    adjoint!(Ac, A)
-    return rmul!(Ac, convert(AbstractQ{TAQ}, adjQ))
-end
 
 ### QQ (including adjoints)
 *(Q::AbstractQ, P::AbstractQ) = Q * (P*I)
@@ -1033,7 +999,7 @@ function _apply_permutation!(F::QRPivoted, B::AbstractVecOrMat)
     B[1:length(F.p), :] = B[F.p, :]
     return B
 end
-_apply_permutation!(F::Factorization, B::AbstractVecOrMat) = B
+_apply_permutation!(::Factorization, B::AbstractVecOrMat) = B
 
 function ldiv!(Fadj::Adjoint{<:Any,<:Union{QR,QRCompactWY,QRPivoted}}, B::AbstractVecOrMat)
     require_one_based_indexing(B)
