@@ -21,7 +21,7 @@ breal = randn(n,2)/2
 bimg  = randn(n,2)/2
 
 # helper functions to unambiguously recover explicit forms of an implicit QR Q
-squareQ(Q::LinearAlgebra.AbstractQ) = (sq = size(Q.factors, 1); lmul!(Q, Matrix{eltype(Q)}(I, sq, sq)))
+squareQ(Q::LinearAlgebra.AbstractQ) = Q*I
 rectangularQ(Q::LinearAlgebra.AbstractQ) = Matrix(Q)
 
 @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)

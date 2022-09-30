@@ -32,7 +32,6 @@ The object has two fields:
     ``v_i`` is the ``i``th column of the matrix `V = I + tril(F.factors, -1)`.
 
 * `τ` is a vector  of length `min(m,n)` containing the coefficients ``\tau_i``.
-
 """
 struct QR{T,S<:AbstractMatrix{T},C<:AbstractVector{T}} <: Factorization{T}
     factors::S
@@ -385,7 +384,7 @@ orthogonal matrix.
 
 The block size for QR decomposition can be specified by keyword argument
 `blocksize :: Integer` when `pivot == NoPivot()` and `A isa StridedMatrix{<:BlasFloat}`.
-It is ignored when `blocksize > minimum(size(A))`.  See [`QRCompactWY`](@ref).
+It is ignored when `blocksize > minimum(size(A))`. See [`QRCompactWY`](@ref).
 
 !!! compat "Julia 1.4"
     The `blocksize` keyword argument requires Julia 1.4 or later.
@@ -575,12 +574,14 @@ QRCompactWYQ{S}(factors::AbstractMatrix, T::AbstractMatrix) where {S} =
            QRCompactWYQ{S,M,typeof(T)}(factors, T), false)
 
 QRPackedQ{T}(Q::QRPackedQ) where {T} = QRPackedQ(convert(AbstractMatrix{T}, Q.factors), convert(Vector{T}, Q.τ))
-AbstractMatrix{T}(Q::QRPackedQ{T}) where {T} = Q
-AbstractMatrix{T}(Q::QRPackedQ) where {T} = QRPackedQ{T}(Q)
 QRCompactWYQ{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ(convert(AbstractMatrix{S}, Q.factors), convert(AbstractMatrix{S}, Q.T))
-AbstractMatrix{S}(Q::QRCompactWYQ{S}) where {S} = Q
-AbstractMatrix{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ{S}(Q)
-Matrix{T}(Q::AbstractQ{S}) where {T,S} = convert(Matrix{T}, lmul!(Q, Matrix{S}(I, size(Q, 1), min(size(Q.factors)...))))
+
+AbstractQ{S}(Q::AbstractQ{S}) where {S} = Q
+AbstractQ{S}(Q::QRPackedQ) where {S} = QRPackedQ{S}(Q)
+AbstractQ{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ{S}(Q)
+
+Matrix{T}(Q::AbstractQ) where {T} = convert(Matrix{T}, Q*I) # generic fallback, yields square matrix
+Matrix{T}(Q::Union{QRCompactWYQ{S},QRPackedQ{S}}) where {T,S} = convert(Matrix{T}, lmul!(Q, Matrix{S}(I, size(Q, 1), min(size(Q.factors)...))))
 Matrix{T}(adjQ::AdjointQ{S}) where {T,S} = convert(Matrix{T}, lmul!(adjQ, Matrix{S}(I, size(adjQ))))
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
 Array{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
@@ -676,31 +677,6 @@ function lmul!(A::QRPackedQ, B::AbstractVecOrMat)
         end
     end
     B
-end
-
-function (*)(Q::AbstractQ, b::AbstractVector)
-    TQb = promote_type(eltype(Q), eltype(b))
-    QQ = convert(AbstractQ{TQb}, Q)
-    if size(Q.factors, 1) == length(b)
-        bnew = copy_similar(b, TQb)
-    elseif size(Q.factors, 2) == length(b)
-        bnew = [b; zeros(TQb, size(Q.factors, 1) - length(b))]
-    else
-        throw(DimensionMismatch("vector must have length either $(size(Q.factors, 1)) or $(size(Q.factors, 2))"))
-    end
-    lmul!(QQ, bnew)
-end
-function (*)(Q::AbstractQ, B::AbstractMatrix)
-    TQB = promote_type(eltype(Q), eltype(B))
-    QQ = convert(AbstractQ{TQB}, Q)
-    if size(Q.factors, 1) == size(B, 1)
-        Bnew = copy_similar(B, TQB)
-    elseif size(Q.factors, 2) == size(B, 1)
-        Bnew = [B; zeros(TQB, size(Q.factors, 1) - size(B,1), size(B, 2))]
-    else
-        throw(DimensionMismatch("first dimension of matrix must have size either $(size(Q.factors, 1)) or $(size(Q.factors, 2))"))
-    end
-    lmul!(QQ, Bnew)
 end
 
 function (*)(Q::AbstractQ, b::Number)
@@ -828,19 +804,6 @@ function rmul!(A::AbstractMatrix, adjQ::AdjointQ{<:Any,<:QRPackedQ})
         end
     end
     A
-end
-function *(A::AbstractMatrix, adjQ::AdjointQ)
-    Q = adjQ.Q
-    TAQ = promote_type(eltype(A), eltype(adjQ))
-    adjQQ = convert(AbstractQ{TAQ}, adjQ)
-    if size(A,2) == size(Q.factors, 1)
-        AA = copy_similar(A, TAQ)
-        return rmul!(AA, adjQQ)
-    elseif size(A,2) == size(Q.factors,2)
-        return rmul!([A zeros(TAQ, size(A, 1), size(Q.factors, 1) - size(Q.factors, 2))], adjQQ)
-    else
-        throw(DimensionMismatch("matrix A has dimensions $(size(A)) but Q-matrix B has dimensions $(size(adjQ))"))
-    end
 end
 *(u::AdjointAbsVec, Q::AdjointQ) = adjoint(Q' * u.parent) # disambiguation
 *(a::AbstractVector, adjQ::AdjointQ) = reshape(a, length(a), 1) * adjQ
