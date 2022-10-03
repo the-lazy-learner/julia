@@ -562,7 +562,7 @@ static int subtype_ccheck(jl_value_t *x, jl_value_t *y, jl_stenv_t *e)
 
 static int subtype_left_var(jl_value_t *x, jl_value_t *y, jl_stenv_t *e, int param)
 {
-    if (x == y)
+    if (x == y && !(jl_is_unionall(y)))
         return 1;
     if (x == jl_bottom_type && jl_is_type(y))
         return 1;
@@ -2897,7 +2897,7 @@ static jl_value_t *intersect_sub_datatype(jl_datatype_t *xd, jl_datatype_t *yd, 
         JL_GC_PUSHARGS(env, envsz);
         jl_stenv_t tempe;
         init_stenv(&tempe, env, envsz);
-        tempe.ignore_free = 1;
+        tempe.intersection = tempe.ignore_free = 1;
         if (subtype_in_env(isuper, super_pattern, &tempe)) {
             jl_value_t *wr = wrapper;
             int i;
