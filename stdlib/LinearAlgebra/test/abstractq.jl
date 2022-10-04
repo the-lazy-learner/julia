@@ -28,6 +28,8 @@ n = 5
         A = rand(T, n, n)
         F = qr(A)
         Q = MyQ(F.Q)
+        @test convert(AbstractQ{complex(T)}, Q) isa MyQ{complex(T)}
+        @test convert(AbstractQ{complex(T)}, Q') isa AdjointQ{<:complex(T),<:MyQ{complex(T)}}
         @test Q*I ≈ Q.Q*I rtol=2eps()
         @test Q'*I ≈ Q.Q'*I rtol=2eps()
         @test I*Q ≈ Q.Q*I rtol=2eps()

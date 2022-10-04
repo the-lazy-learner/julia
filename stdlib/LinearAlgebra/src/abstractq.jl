@@ -18,11 +18,11 @@ adjoint(adjQ::AdjointQ) = adjQ.Q
 
 # conversion
 AbstractQ{S}(Q::AbstractQ{S}) where {S} = Q
-# the following needs to be defined for each subtype
+# the following eltype promotion needs to be defined for each subtype
 # convert(::Type{AbstractQ{T}}, Q::QType) where {T} = QType{T}(Q)
-convert(::Type{AbstractQ{T}}, adjQ::AbstractQ{T}) where {T} = Q
-convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, adjQ.Q)'
+convert(::Type{AbstractQ{T}}, Q::AbstractQ{T}) where {T} = Q
 convert(::Type{AbstractQ{T}}, adjQ::AdjointQ{T}) where {T} = adjQ
+convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, adjQ.Q)'
 
 # ... to matrix
 Matrix{T}(Q::AbstractQ) where {T} = convert(Matrix{T}, Q*I) # generic fallback, yields square matrix
