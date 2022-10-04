@@ -647,9 +647,6 @@ function *(A::AbstractTriangular, B::Union{SymTridiagonal, Tridiagonal})
     A_mul_B_td!(zeros(TS, size(A)), A, B)
 end
 
-const UpperOrUnitUpperTriangular{T} = Union{UpperTriangular{T}, UnitUpperTriangular{T}}
-const LowerOrUnitLowerTriangular{T} = Union{LowerTriangular{T}, UnitLowerTriangular{T}}
-
 function *(A::UpperOrUnitUpperTriangular, B::Bidiagonal)
     TS = promote_op(matprod, eltype(A), eltype(B))
     C = A_mul_B_td!(zeros(TS, size(A)), A, B)

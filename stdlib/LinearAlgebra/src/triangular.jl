@@ -151,6 +151,9 @@ julia> UnitUpperTriangular(A)
 """
 UnitUpperTriangular
 
+const UpperOrUnitUpperTriangular{T} = Union{UpperTriangular{T}, UnitUpperTriangular{T}}
+const LowerOrUnitLowerTriangular{T} = Union{LowerTriangular{T}, UnitLowerTriangular{T}}
+
 imag(A::UpperTriangular) = UpperTriangular(imag(A.data))
 imag(A::LowerTriangular) = LowerTriangular(imag(A.data))
 imag(A::UnitLowerTriangular) = LowerTriangular(tril!(imag(A.data),-1))

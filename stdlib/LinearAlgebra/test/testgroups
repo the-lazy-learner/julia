@@ -1,3 +1,4 @@
+addmul
 triangular
 qr
 dense
@@ -23,6 +24,6 @@ adjtrans
 pinv
 givens
 structuredbroadcast
-addmul
 ldlt
 factorization
+abstractq

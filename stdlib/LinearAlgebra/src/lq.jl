@@ -63,12 +63,6 @@ Base.iterate(S::LQ) = (S.L, Val(:Q))
 Base.iterate(S::LQ, ::Val{:Q}) = (S.Q, Val(:done))
 Base.iterate(S::LQ, ::Val{:done}) = nothing
 
-struct LQPackedQ{T,S<:AbstractMatrix{T},C<:AbstractVector{T}} <: AbstractQ{T}
-    factors::S
-    τ::C
-end
-
-
 """
     lq!(A) -> LQ
 
@@ -161,35 +155,8 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, F::LQ)
     show(io, mime, F.Q)
 end
 
-LQPackedQ{T}(Q::LQPackedQ) where {T} = LQPackedQ(convert(AbstractMatrix{T}, Q.factors), convert(Vector{T}, Q.τ))
-@deprecate(AbstractMatrix{T}(Q::LQPackedQ) where {T},
-    convert(AbstractQ{T}, Q),
-    false)
-Matrix{T}(A::LQPackedQ) where {T} = convert(Matrix{T}, LAPACK.orglq!(copy(A.factors), A.τ))
-Matrix(A::LQPackedQ{T}) where {T} = Matrix{T}(A)
-Array{T}(A::LQPackedQ{T}) where {T} = Matrix{T}(A)
-Array(A::LQPackedQ) = Matrix(A)
-convert(::Type{AbstractQ{T}}, Q::LQPackedQ) where {T} = LQPackedQ{T}(Q)
-convert(::Type{AbstractQ}, Q::LQPackedQ) = Q
-
 size(F::LQ, dim::Integer) = size(getfield(F, :factors), dim)
 size(F::LQ)               = size(getfield(F, :factors))
-
-# size(Q::LQPackedQ) yields the shape of Q's square form
-function size(Q::LQPackedQ)
-    n = size(Q.factors, 2)
-    return n, n
-end
-function size(Q::LQPackedQ, dim::Integer)
-    if dim < 1
-        throw(BoundsError())
-    elseif dim <= 2 # && 1 <= dim
-        return size(Q.factors, 2)
-    else # 2 < dim
-        return 1
-    end
-end
-
 
 ## Multiplication by LQ
 function lmul!(A::LQ, B::AbstractVecOrMat)
@@ -200,163 +167,6 @@ function *(A::LQ{TA}, B::AbstractVecOrMat{TB}) where {TA,TB}
     TAB = promote_type(TA, TB)
     _cut_B(lmul!(convert(Factorization{TAB}, A), copy_similar(B, TAB)), 1:size(A,1))
 end
-
-## Multiplication by Q
-### QB
-lmul!(A::LQPackedQ{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} = LAPACK.ormlq!('L','N',A.factors,A.τ,B)
-function (*)(A::LQPackedQ, B::AbstractVector)
-    TAB = promote_type(eltype(A), eltype(B))
-    lmul!(convert(AbstractQ{TAB}, A), copy_similar(B, TAB))
-end
-function (*)(A::LQPackedQ, B::AbstractMatrix)
-    TAB = promote_type(eltype(A), eltype(B))
-    lmul!(convert(AbstractQ{TAB}, A), copy_similar(B, TAB))
-end
-
-### QcB
-lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
-    (A = adjA.Q; LAPACK.ormlq!('L', 'T', A.factors, A.τ, B))
-lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
-    (A = adjA.Q; LAPACK.ormlq!('L', 'C', A.factors, A.τ, B))
-
-function *(adjA::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVector)
-    A = adjA.Q
-    TAB = promote_type(eltype(A), eltype(B))
-    if length(B) == size(A.factors, 2)
-        lmul!(convert(AbstractQ{TAB}, adjA), copy_similar(B, TAB))
-    elseif length(B) == size(A.factors, 1)
-        lmul!(convert(AbstractQ{TAB}, adjA), [B; zeros(TAB, size(A.factors, 2) - size(A.factors, 1), size(B, 2))])
-    else
-        throw(DimensionMismatch("length of B, $(length(B)), must equal one of the dimensions of A, $(size(A))"))
-    end
-end
-function *(adjA::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractMatrix)
-    A = adjA.Q
-    TAB = promote_type(eltype(A), eltype(B))
-    if size(B,1) == size(A.factors,2)
-        lmul!(convert(AbstractQ{TAB}, adjA), copy_similar(B, TAB))
-    elseif size(B,1) == size(A.factors,1)
-        lmul!(convert(AbstractQ{TAB}, adjA), [B; zeros(TAB, size(A.factors, 2) - size(A.factors, 1), size(B, 2))])
-    else
-        throw(DimensionMismatch("first dimension of B, $(size(B,1)), must equal one of the dimensions of A, $(size(A))"))
-    end
-end
-
-### QBc/QcBc
-function *(A::LQPackedQ, adjB::Adjoint{<:Any,<:AbstractVecOrMat})
-    B = adjB.parent
-    TAB = promote_type(eltype(A), eltype(B))
-    BB = similar(B, TAB, reverse(size(B)))
-    adjoint!(BB, B)
-    return lmul!(convert(AbstractQ{TAB}, A), BB)
-end
-function *(adjA::AdjointQ{<:Any,<:LQPackedQ}, adjB::Adjoint{<:Any,<:AbstractVecOrMat})
-    B = adjB.parent
-    TAB = promote_type(eltype(adjA.Q), eltype(B))
-    BB = similar(B, TAB, reverse(size(B)))
-    adjoint!(BB, B)
-    return lmul!(convert(AbstractQ{TAB}, adjA), BB)
-end
-
-# in-place right-application of LQPackedQs
-# these methods require that the applied-to matrix's (A's) number of columns
-# match the number of columns (nQ) of the LQPackedQ (Q) (necessary for in-place
-# operation, and the underlying LAPACK routine (ormlq) treats the implicit Q
-# as its (nQ-by-nQ) square form)
-rmul!(A::StridedMatrix{T}, B::LQPackedQ{T}) where {T<:BlasFloat} =
-    LAPACK.ormlq!('R', 'N', B.factors, B.τ, A)
-rmul!(A::StridedMatrix{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasReal} =
-    (B = adjB.Q; LAPACK.ormlq!('R', 'T', B.factors, B.τ, A))
-rmul!(A::StridedMatrix{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasComplex} =
-    (B = adjB.Q; LAPACK.ormlq!('R', 'C', B.factors, B.τ, A))
-
-# out-of-place right application of LQPackedQs
-#
-# LQPackedQ's out-of-place multiplication behavior is context dependent. specifically,
-# if the inner dimension in the multiplication is the LQPackedQ's second dimension,
-# the LQPackedQ behaves like its square form. if the inner dimension in the
-# multiplication is the LQPackedQ's first dimension, the LQPackedQ behaves like either
-# its square form or its truncated form depending on the shape of the other object
-# involved in the multiplication. we treat these cases separately.
-#
-# (1) the inner dimension in the multiplication is the LQPackedQ's second dimension.
-# in this case, the LQPackedQ behaves like its square form.
-#
-function *(A::AbstractVector, adjQ::AdjointQ{<:Any,<:LQPackedQ})
-    TR = promote_type(eltype(A), eltype(adjQ))
-    return rmul!(copy_similar(A, TR), convert(AbstractQ{TR}, adjQ))
-end
-function *(A::AbstractMatrix, adjQ::AdjointQ{<:Any,<:LQPackedQ})
-    TR = promote_type(eltype(A), eltype(adjQ))
-    return rmul!(copy_similar(A, TR), convert(AbstractQ{TR}, adjQ))
-end
-function *(adjA::AdjointAbsMat, adjQ::AdjointQ{<:Any,<:LQPackedQ})
-    A = adjA.parent
-    TR = promote_type(eltype(A), eltype(adjQ))
-    C = adjoint!(similar(A, TR, reverse(size(A))), A)
-    return rmul!(C, convert(AbstractQ{TR}, adjQ))
-end
-*(u::AdjointAbsVec, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = adjoint(adjQ.Q * u.parent)
-
-### BQ/BcQ
-
-#
-# (2) the inner dimension in the multiplication is the LQPackedQ's first dimension.
-# in this case, the LQPackedQ behaves like either its square form or its
-# truncated form depending on the shape of the other object in the multiplication.
-#
-# these methods: (1) check whether the applied-to matrix's (A's) appropriate dimension
-# (columns for A_*, rows for Ac_*) matches the number of columns (nQ) of the LQPackedQ (Q),
-# and if so effectively apply Q's square form to A without additional shenanigans; and
-# (2) if the preceding dimensions do not match, check whether the appropriate dimension of
-# A instead matches the number of rows of the matrix of which Q is a factor (i.e.
-# size(Q.factors, 1)), and if so implicitly apply Q's truncated form to A by zero extending
-# A as necessary for check (1) to pass (if possible) and then applying Q's square form
-#
-function *(A::AbstractVector, Q::LQPackedQ)
-    TR = promote_type(eltype(A), eltype(Q))
-    if 1 == size(Q.factors, 2)
-        C = copy_similar(A, TR)
-    elseif 1 == size(Q.factors, 1)
-        C = zeros(TR, length(A), size(Q.factors, 2))
-        copyto!(C, 1, A, 1, length(A))
-    else
-        _rightappdimmismatch("columns")
-    end
-    return rmul!(C, convert(AbstractQ{TR}, Q))
-end
-function *(A::AbstractMatrix, Q::LQPackedQ)
-    TR = promote_type(eltype(A), eltype(Q))
-    if size(A, 2) == size(Q.factors, 2)
-        C = copy_similar(A, TR)
-    elseif size(A, 2) == size(Q.factors, 1)
-        C = zeros(TR, size(A, 1), size(Q.factors, 2))
-        copyto!(C, 1, A, 1, length(A))
-    else
-        _rightappdimmismatch("columns")
-    end
-    return rmul!(C, convert(AbstractQ{TR}, Q))
-end
-function *(adjA::AdjointAbsMat, Q::LQPackedQ)
-    A = adjA.parent
-    TR = promote_type(eltype(A), eltype(Q))
-    if size(A, 1) == size(Q.factors, 2)
-        C = adjoint!(similar(A, TR, reverse(size(A))), A)
-    elseif size(A, 1) == size(Q.factors, 1)
-        C = zeros(TR, size(A, 2), size(Q.factors, 2))
-        adjoint!(view(C, :, 1:size(A, 1)), A)
-    else
-        _rightappdimmismatch("rows")
-    end
-    return rmul!(C, convert(AbstractQ{TR}, Q))
-end
-*(adjA::AdjointAbsVec, Q::LQPackedQ) = (Q' * adjA.parent)'
-
-_rightappdimmismatch(rowsorcols) =
-    throw(DimensionMismatch(string("the number of $(rowsorcols) of the matrix on the left ",
-        "must match either (1) the number of columns of the (LQPackedQ) matrix on the right ",
-        "or (2) the number of rows of that (LQPackedQ) matrix's internal representation ",
-        "(the factorization's originating matrix's number of rows)")))
 
 # With a real lhs and complex rhs with the same precision, we can reinterpret
 # the complex rhs as a real rhs with twice the number of columns
@@ -390,7 +200,3 @@ function ldiv!(Fadj::Adjoint{<:Any,<:LQ}, B::AbstractVecOrMat)
     ldiv!(UpperTriangular(adjoint(F.L)), view(B, 1:size(F,1), axes(B,2)))
     return B
 end
-
-# In LQ factorization, `Q` is expressed as the product of the adjoint of the
-# reflectors.  Thus, `det` has to be conjugated.
-det(Q::LQPackedQ) = conj(_det_tau(Q.τ))

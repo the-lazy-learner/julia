@@ -43,6 +43,10 @@ Bidiagonal(A::AbstractTriangular) =
     isbanded(A, -1, 0) ? Bidiagonal(diag(A, 0), diag(A, -1), :L) : # is lower bidiagonal
         throw(ArgumentError("matrix cannot be represented as Bidiagonal"))
 
+## conversion from UniformScaling to Diagonal
+Diagonal{T}(s::UniformScaling, m::Integer) where {T} = Diagonal{T}(fill(T(s.λ), m))
+Diagonal(s::UniformScaling, m::Integer) = Diagonal{eltype(s)}(s, m)
+
 _lucopy(A::Bidiagonal, T)     = copymutable_oftype(Tridiagonal(A), T)
 _lucopy(A::Diagonal, T)       = copymutable_oftype(Tridiagonal(A), T)
 function _lucopy(A::SymTridiagonal, T)
@@ -105,6 +109,33 @@ for op in (:+, :-)
             end
         end
     end
+end
+
+function *(H::UpperHessenberg, B::Bidiagonal)
+    TS = promote_op(matprod, eltype(H), eltype(B))
+    A = A_mul_B_td!(zeros(TS, size(H)), H, B)
+    return B.uplo == 'U' ? UpperHessenberg(A) : A
+end
+function *(B::Bidiagonal, H::UpperHessenberg)
+    TS = promote_op(matprod, eltype(B), eltype(H))
+    A = A_mul_B_td!(zeros(TS, size(H)), B, H)
+    return B.uplo == 'U' ? UpperHessenberg(A) : A
+end
+
+/(H::UpperHessenberg, B::Bidiagonal) = _rdiv(H, B)
+/(H::UpperHessenberg{<:Number}, B::Bidiagonal{<:Number}) = _rdiv(H, B)
+function _rdiv(H::UpperHessenberg, B::Bidiagonal)
+    T = typeof(oneunit(eltype(H))/oneunit(eltype(B)))
+    A = _rdiv!(zeros(T, size(H)), H, B)
+    return B.uplo == 'U' ? UpperHessenberg(A) : A
+end
+
+\(B::Bidiagonal{<:Number}, H::UpperHessenberg{<:Number}) = _ldiv(B, H)
+\(B::Bidiagonal, H::UpperHessenberg) = _ldiv(B, H)
+function _ldiv(B::Bidiagonal, H::UpperHessenberg)
+    T = typeof(oneunit(eltype(B))\oneunit(eltype(H)))
+    A = ldiv!(zeros(T, size(H)), B, H)
+    return B.uplo == 'U' ? UpperHessenberg(A) : A
 end
 
 # specialized +/- for structured matrices. If these are removed, it falls
@@ -285,70 +316,11 @@ function (-)(A::UniformScaling, B::Diagonal{<:Number})
     Diagonal(A.λ .- B.diag)
 end
 
-# AbstractQ
-lmul!(Q::AbstractQ, B::AbstractTriangular) = lmul!(Q, full!(B))
-lmul!(Q::QRPackedQ, B::AbstractTriangular) = lmul!(Q, full!(B)) # disambiguation
-lmul!(Q::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractTriangular) = lmul!(Q, full!(B)) # disambiguation
+Base.muladd(A::Union{Diagonal, UniformScaling}, B::Union{Diagonal, UniformScaling}, z::Union{Diagonal, UniformScaling}) =
+    Diagonal(_diag_or_value(A) .* _diag_or_value(B) .+ _diag_or_value(z))
 
-rmul!(A::AbstractTriangular, Q::AbstractQ) = rmul!(full!(A), Q)
-rmul!(A::AbstractTriangular, Q::QRPackedQ) = rmul!(full!(A), Q) # disambiguation
-rmul!(A::AbstractTriangular, Q::AdjointQ{<:Any,<:QRPackedQ}) = rmul!(full!(A), Q) # disambiguation
-
-function (*)(Q::AbstractQ, b::AbstractVecOrMat)
-    T = promote_type(eltype(Q), eltype(b))
-    if size(Q, 2) == size(b, 1)
-        lmul!(convert(AbstractQ{T}, Q), copy_similar(b, T))
-    else
-        throw(DimensionMismatch("first dimension of matrix must have size $(size(Q, 2)), but has $(size(b, 1))"))
-    end
-end
-function (*)(Q::Union{QRPackedQ,QRCompactWYQ,HessenbergQ}, b::AbstractVector)
-    T = promote_type(eltype(Q), eltype(b))
-    QQ = convert(AbstractQ{T}, Q)
-    if size(Q.factors, 1) == length(b)
-        bnew = copy_similar(b, T)
-    elseif size(Q.factors, 2) == length(b)
-        bnew = [b; zeros(T, size(Q.factors, 1) - length(b))]
-    else
-        throw(DimensionMismatch("vector must have length either $(size(Q.factors, 1)) or $(size(Q.factors, 2))"))
-    end
-    lmul!(QQ, bnew)
-end
-function (*)(Q::Union{QRPackedQ,QRCompactWYQ,HessenbergQ}, B::AbstractMatrix)
-    T = promote_type(eltype(Q), eltype(B))
-    QQ = convert(AbstractQ{T}, Q)
-    if size(Q.factors, 1) == size(B, 1)
-        Bnew = copy_similar(B, T)
-    elseif size(Q.factors, 2) == size(B, 1)
-        Bnew = [B; zeros(T, size(Q.factors, 1) - size(B,1), size(B, 2))]
-    else
-        throw(DimensionMismatch("first dimension of matrix must have size either $(size(Q.factors, 1)) or $(size(Q.factors, 2))"))
-    end
-    lmul!(QQ, Bnew)
-end
-function (*)(A::AbstractMatrix, Q::AbstractQ)
-    T = promote_type(eltype(Q), eltype(A))
-    if size(A, 2) == size(Q, 1)
-        rmul!(copy_similar(A, T), convert(AbstractQ{T}, Q))
-    else
-        throw(DimensionMismatch("rhs must have first dimension $(size(Q, 2)), but has $(size(b, 1))"))
-    end
-end
-function (*)(A::AbstractMatrix, adjQ::AdjointQ{<:Any,<:Union{QRPackedQ,QRCompactWYQ,HessenbergQ}})
-    Q = adjQ.Q
-    TAQ = promote_type(eltype(A), eltype(adjQ))
-    adjQQ = convert(AbstractQ{TAQ}, adjQ)
-    if size(A,2) == size(Q.factors, 1)
-        AA = copy_similar(A, TAQ)
-        return rmul!(AA, adjQQ)
-    elseif size(A,2) == size(Q.factors,2)
-        return rmul!([A zeros(TAQ, size(A, 1), size(Q.factors, 1) - size(Q.factors, 2))], adjQQ)
-    else
-        throw(DimensionMismatch("matrix A has dimensions $(size(A)) but Q-matrix B has dimensions $(size(adjQ))"))
-    end
-end
-# disambiguation
-*(u::AdjointAbsVec, Q::AdjointQ{<:Any,<:Union{QRPackedQ,QRCompactWYQ,HessenbergQ}}) = adjoint(Q' * u.parent)
+_diag_or_value(A::Diagonal) = A.diag
+_diag_or_value(A::UniformScaling) = A.λ
 
 # fill[stored]! methods
 fillstored!(A::Diagonal, x) = (fill!(A.diag, x); A)
