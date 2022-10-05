@@ -321,11 +321,53 @@ column of its matrix representation requires running "matrix"-vector multiplicat
 rather than simply reading out data from memory (possibly filling parts of the vector with
 structural zeros). Another clear distinction from other, non-triangular matrix types is
 that the underlying multiplication code allows for in-place modification during multiplication.
+Furthermore, objects of specific `AbstractQ` subtypes as those created via [`qr`](@ref),
+[`hessenberg`](@ref) and [`lq`](@ref) can behave like a square or a rectangular matrix
+depending on context:
+
+```julia
+julia> using LinearAlgebra
+
+julia> Q = qr(rand(3,2)).Q
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+
+julia> Matrix(Q)
+3×2 Matrix{Float64}:
+ -0.320597   0.865734
+ -0.765834  -0.475694
+ -0.557419   0.155628
+
+julia> Q*I
+3×3 Matrix{Float64}:
+ -0.320597   0.865734  -0.384346
+ -0.765834  -0.475694  -0.432683
+ -0.557419   0.155628   0.815514
+
+julia> Q*ones(2)
+3-element Vector{Float64}:
+  0.5451367118802273
+ -1.241527373086654
+ -0.40179067589600226
+
+julia> Q*ones(3)
+3-element Vector{Float64}:
+  0.16079054743832022
+ -1.674209978965636
+  0.41372375588835797
+
+julia> ones(1,2) * Q'
+1×3 Matrix{Float64}:
+ 0.545137  -1.24153  -0.401791
+
+julia> ones(1,3) * Q'
+1×3 Matrix{Float64}:
+ 0.160791  -1.67421  0.413724
+```
 
 Due to this distinction from dense or structured matrices, the abstract `AbstractQ` type
 does not subtype `AbstractMatrix`, but instead has its own type hierarchy. Custom types
 that subtype `AbstractQ` can rely on generic fallbacks if the following interface is satisfied.
-For
+For example, for
 
 ```julia
 struct MyQ{T} <: LinearAlgebra.AbstractQ{T}
@@ -352,7 +394,7 @@ obtaining a matrix representation of `Q` via `Matrix(Q)` (or `Q*I`) and indexing
 matrix representation all work. In contrast, addition and subtraction as well as more
 generally broadcasting over elements in the matrix representation fail because that would
 be highly inefficient. For such use cases, consider computing the matrix representation
-once and cache it for future reuse.
+up front and cache it for future reuse.
 
 ## Standard functions
 
