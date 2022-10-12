@@ -111,7 +111,7 @@ julia> l == S.L &&  q == S.Q
 true
 ```
 """
-lq(A::AbstractMatrix{T}) where {T}  = lq!(copy_similar(A, lq_eltype(T)))
+lq(A::AbstractMatrix{T}) where {T} = lq!(copy_similar(A, lq_eltype(T)))
 lq(x::Number) = lq!(fill(convert(lq_eltype(typeof(x)), x), 1, 1))
 
 lq_eltype(::Type{T}) where {T} = typeof(zero(T) / sqrt(abs2(one(T))))
