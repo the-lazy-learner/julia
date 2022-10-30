@@ -1101,7 +1101,7 @@ equal). It makes an effort to be fast for most inputs.
 The algorithms used by `DEFAULT_STABLE` are an implementation detail. See extended help
 for the current dispatch system.
 
-## Extended Help
+# Extended Help
 
 `DEFAULT_STABLE` is composed of two parts: the [`InitialOptimizations`](@ref) and a hybrid
 of Radix, Insertion, Counting, Quick sorts.
