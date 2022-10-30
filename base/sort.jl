@@ -530,7 +530,7 @@ function _sort!(v::AbstractVector, a::IEEEFloatOptimization, o::Ordering;
         _sort!(iv, a.next, Reverse; lo, hi=j, kw...)
         _sort!(iv, a.next, Forward; lo=j+1, hi, kw...)
         v
-    elseif eltype(v) <: Integer && o isa Perm{DirectOrdering} && is_concrete_IEEEFloat(eltype(o.data))
+    elseif eltype(v) <: Integer && o isa Perm{<:DirectOrdering} && is_concrete_IEEEFloat(eltype(o.data))
         lo, hi = send_to_end!(i -> isnan(@inbounds o.data[i]), v, o.order, true; lo, hi)
         ip = reinterpret(UIntType(eltype(o.data)), o.data)
         j = send_to_end!(i -> after_zero(o.order, @inbounds ip[i]), v; lo, hi)
