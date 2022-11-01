@@ -522,7 +522,7 @@ after_zero(::ForwardOrdering, x) = 0 <= x
 after_zero(::ReverseOrdering, x) = x < 0
 is_concrete_IEEEFloat(T::Type) = T <: Base.IEEEFloat && isconcretetype(T)
 function _sort!(v::AbstractVector, a::IEEEFloatOptimization, o::Ordering;
-                lo=firstindex(v), hi::Integer=lastindex(v), kw...)
+                lo=firstindex(v), hi=lastindex(v), kw...)
     if is_concrete_IEEEFloat(eltype(v)) && o isa DirectOrdering
         lo, hi = send_to_end!(isnan, v, o, true; lo, hi)
         iv = reinterpret(UIntType(eltype(v)), v)
@@ -530,7 +530,7 @@ function _sort!(v::AbstractVector, a::IEEEFloatOptimization, o::Ordering;
         _sort!(iv, a.next, Reverse; lo, hi=j, kw...)
         _sort!(iv, a.next, Forward; lo=j+1, hi, kw...)
         v
-    elseif eltype(v) <: Integer && o isa Perm{<:DirectOrdering} && is_concrete_IEEEFloat(eltype(o.data))
+    elseif eltype(v) <: Integer && o isa Perm && o.order isa DirectOrdering && is_concrete_IEEEFloat(eltype(o.data))
         lo, hi = send_to_end!(i -> isnan(@inbounds o.data[i]), v, o.order, true; lo, hi)
         ip = reinterpret(UIntType(eltype(o.data)), o.data)
         j = send_to_end!(i -> after_zero(o.order, @inbounds o.data[i]), v; lo, hi)
