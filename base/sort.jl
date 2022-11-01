@@ -1623,9 +1623,9 @@ function sort!(A::AbstractArray{T};
                rev::Union{Bool,Nothing}=nothing,
                order::Ordering=Forward,
                buffer::Union{AbstractVector{T}, Nothing}=similar(A, size(A, dims))) where T
-    _sort!(A, Val(dims), alg, ord(lt, by, rev, order), buffer)
+    __sort!(A, Val(dims), alg, ord(lt, by, rev, order), buffer)
 end
-function _sort!(A::AbstractArray{T}, ::Val{K},
+function __sort!(A::AbstractArray{T}, ::Val{K},
                 alg::Algorithm,
                 order::Ordering,
                 buffer::Union{AbstractVector{T}, Nothing}) where {K,T}
