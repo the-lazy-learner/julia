@@ -1842,8 +1842,8 @@ function _sort!(v::AbstractVector, a::MergeSort, o::Ordering, kw)
 end
 
 # Support 3- and 5-argument version of sort! for backwards compatability
-sort!(v::AbstractVector, a::Algorithm, o::Ordering) = _sort!(v, a, o, (;))
-sort!(v::AbstractVector, lo::Integer, hi::Integer, a::Algorithm, o::Ordering) = _sort!(v, a, o, (; lo, hi))
+sort!(v::AbstractVector, a::Union{Algorithm, Type{<:Algorithm}}, o::Ordering) = _sort!(v, getalg(a), o, (;))
+sort!(v::AbstractVector, lo::Integer, hi::Integer, a::Union{Algorithm, Type{<:Algorithm}}, o::Ordering) = _sort!(v, getalg(a), o, (; lo, hi))
 # Support alg=InsertionSort and alg=MergeSort for backwards compatability
 getalg(a::Algorithm) = a
 getalg(::Type{A}) where A <: Algorithm = A()
